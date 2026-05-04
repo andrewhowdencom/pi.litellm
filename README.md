@@ -1,5 +1,8 @@
 # pi.litellm
 
+[![CI](https://github.com/andrewhowdencom/pi.litellm/actions/workflows/ci.yml/badge.svg)](https://github.com/andrewhowdencom/pi.litellm/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Pi extension that adds [LiteLLM](https://docs.litellm.ai/docs/) as a first-class provider with **automatic model discovery**. Point it at your LiteLLM proxy and all configured models appear in Pi's `/model` selector — no manual enumeration required.
 
 ## Installation
@@ -9,6 +12,8 @@ Install as a Pi package from git:
 ```bash
 pi install git:github.com/andrewhowdencom/pi.litellm
 ```
+
+> The npm package name is `pi-litellm`.
 
 Or load temporarily for a single session:
 
@@ -101,11 +106,11 @@ pi --provider litellm --model claude-sonnet-4 -p "Refactor this function"
 
 ## How autodiscovery works
 
-At startup, the extension queries your LiteLLM proxy in two phases:
+At startup, the extension queries your LiteLLM proxy in two phases. `{baseUrl}` below refers to your `LITELLM_BASE_URL` after normalization — it always ends with `/v1`.
 
 1. **Primary:** `GET {baseUrl}/model/info` — LiteLLM's rich metadata endpoint. Returns model IDs, context windows, token limits, and per-token costs when available.
 
-2. **Fallback:** If `/model/info` returns 404 or errors, `GET {baseUrl}/v1/models` — OpenAI-compatible minimal list. Only model IDs are available; all other metadata uses sensible defaults.
+2. **Fallback:** If `/model/info` returns 404 or errors, `GET {baseUrl}/models` — OpenAI-compatible minimal list. Only model IDs are available; all other metadata uses sensible defaults.
 
 ### Sensible defaults
 
@@ -141,7 +146,7 @@ Async extension factory loads
     ├─► Fetch /model/info (rich metadata)
     │   └─► On success: extract costs, context windows, token limits
     │
-    ├─► On failure: fetch /v1/models (minimal list)
+    ├─► On failure: fetch /models (minimal list)
     │   └─► Only model IDs available
     │
     ├─► Map each model to Pi ProviderModelConfig
@@ -179,11 +184,32 @@ Your LiteLLM proxy is not exposing the `/model/info` endpoint (common with older
 - Verify the base URL is correct (try `curl $LITELLM_BASE_URL/v1/models`).
 - If using HTTPS with a self-signed certificate, ensure your Node.js environment trusts the certificate.
 
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Type-check and test
+npm run check
+
+# Type-check only
+npm run build
+```
+
 ## Requirements
 
 - [Pi](https://pi.dev) ≥ 0.72 (for `registerProvider` API)
 - [LiteLLM Proxy](https://docs.litellm.ai/docs/simple_proxy) with at least `/v1/models` exposed
 - `/model/info` endpoint recommended for rich metadata (costs, context windows)
+- Peer dependencies (provided by Pi): `@mariozechner/pi-ai`, `@mariozechner/pi-coding-agent`, `typebox`
+
+## Support
+
+Report issues at [github.com/andrewhowdencom/pi.litellm/issues](https://github.com/andrewhowdencom/pi.litellm/issues).
 
 ## License
 
