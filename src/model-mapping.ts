@@ -14,6 +14,9 @@ export interface PiModelConfig {
 	};
 	contextWindow: number;
 	maxTokens: number;
+	compat?: {
+		supportsStore?: boolean;
+	};
 }
 
 const DEFAULT_CONTEXT_WINDOW = 128_000;
@@ -81,5 +84,8 @@ export function mapToPiModel(
 		},
 		contextWindow,
 		maxTokens,
+		compat: {
+			supportsStore: false,
+		},
 	};
 }
