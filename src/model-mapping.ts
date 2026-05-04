@@ -19,24 +19,24 @@ export interface PiModelConfig {
 const DEFAULT_CONTEXT_WINDOW = 128_000;
 const DEFAULT_MAX_TOKENS = 4096;
 
-function hasVisionSupport(modelId: string): boolean {
+export function hasVisionSupport(modelId: string): boolean {
 	const visionPatterns = /vision|gpt-4o|claude-.*sonnet|gemini|llava/i;
 	return visionPatterns.test(modelId);
 }
 
-function hasReasoningSupport(modelId: string): boolean {
+export function hasReasoningSupport(modelId: string): boolean {
 	const reasoningPatterns = /\bo1\b|\bo3\b|reasoning|thinking|\br1\b|deepseek-r1/i;
 	return reasoningPatterns.test(modelId);
 }
 
-function costPerMillion(tokenCost?: number): number {
+export function costPerMillion(tokenCost?: number): number {
 	if (tokenCost === undefined || tokenCost === null || Number.isNaN(tokenCost)) {
 		return 0;
 	}
 	return tokenCost * 1_000_000;
 }
 
-function clampPositiveInt(value: number | undefined, defaultValue: number): number {
+export function clampPositiveInt(value: number | undefined, defaultValue: number): number {
 	if (value === undefined || value === null || Number.isNaN(value) || value <= 0) {
 		return defaultValue;
 	}

@@ -40,10 +40,15 @@ function validateUrl(url: string): void {
 	}
 }
 
-function loadConfigFile(): Record<string, ModelOverrides> | undefined {
-	const configPath = resolve(process.cwd(), ".pi", "litellm.json");
+function loadConfigFile(deps?: {
+	readFile?: (path: string, encoding: string) => string;
+	cwd?: () => string;
+}): Record<string, ModelOverrides> | undefined {
+	const readFile = deps?.readFile ?? readFileSync;
+	const cwd = deps?.cwd ?? process.cwd;
+	const configPath = resolve(cwd(), ".pi", "litellm.json");
 	try {
-		const content = readFileSync(configPath, "utf-8");
+		const content = readFile(configPath, "utf-8");
 		const parsed = JSON.parse(content) as {
 			modelOverrides?: Record<string, ModelOverrides>;
 		};
@@ -58,8 +63,13 @@ function loadConfigFile(): Record<string, ModelOverrides> | undefined {
 	}
 }
 
-export function resolveConfig(): LiteLLMConfig {
-	const baseUrlRaw = process.env.LITELLM_BASE_URL;
+export function resolveConfig(deps?: {
+	env?: NodeJS.ProcessEnv;
+	readFile?: (path: string, encoding: string) => string;
+	cwd?: () => string;
+}): LiteLLMConfig {
+	const env = deps?.env ?? process.env;
+	const baseUrlRaw = env.LITELLM_BASE_URL;
 	if (!baseUrlRaw) {
 		throw new Error(
 			"LITELLM_BASE_URL environment variable is required. " +
@@ -70,8 +80,8 @@ export function resolveConfig(): LiteLLMConfig {
 	const baseUrl = normalizeBaseUrl(baseUrlRaw);
 	validateUrl(baseUrl);
 
-	const apiKey = process.env.LITELLM_API_KEY;
-	const modelOverrides = loadConfigFile();
+	const apiKey = env.LITELLM_API_KEY;
+	const modelOverrides = loadConfigFile(deps);
 
 	return {
 		baseUrl,

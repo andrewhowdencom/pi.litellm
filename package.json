@@ -25,9 +25,10 @@
     "README.md"
   ],
   "scripts": {
-    "clean": "echo 'nothing to clean'",
-    "build": "echo 'nothing to build — jiti handles TypeScript at runtime'",
-    "check": "echo 'nothing to check — validated at runtime by Pi'"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc --noEmit",
+    "check": "tsc --noEmit && vitest run"
   },
   "pi": {
     "extensions": [
@@ -35,8 +36,12 @@
     ]
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
     "typebox": "*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   }
 }

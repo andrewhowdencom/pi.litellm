@@ -17,7 +17,7 @@ function buildHeaders(apiKey?: string): Record<string, string> {
 	return headers;
 }
 
-function isValidModelInfoResponse(data: unknown): data is {
+export function isValidModelInfoResponse(data: unknown): data is {
 	data: Array<{
 		model_name?: string;
 		litellm_params?: { model?: string };
@@ -38,7 +38,7 @@ function isValidModelInfoResponse(data: unknown): data is {
 	);
 }
 
-function isValidModelsResponse(data: unknown): data is {
+export function isValidModelsResponse(data: unknown): data is {
 	data: Array<{ id?: string }>;
 } {
 	return (
@@ -53,10 +53,11 @@ async function fetchModelInfo(
 	baseUrl: string,
 	apiKey?: string,
 	signal?: AbortSignal,
+	fetchImpl: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<LiteLLMModelInfo[] | null> {
 	const url = `${baseUrl}/model/info`;
 	try {
-		const response = await fetch(url, {
+		const response = await fetchImpl(url, {
 			headers: buildHeaders(apiKey),
 			signal,
 		});
@@ -109,10 +110,11 @@ async function fetchModelsList(
 	baseUrl: string,
 	apiKey?: string,
 	signal?: AbortSignal,
+	fetchImpl: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<LiteLLMModelInfo[]> {
 	const url = `${baseUrl}/models`;
 	try {
-		const response = await fetch(url, {
+		const response = await fetchImpl(url, {
 			headers: buildHeaders(apiKey),
 			signal,
 		});
@@ -150,11 +152,12 @@ export async function discoverModels(
 	baseUrl: string,
 	apiKey?: string,
 	signal?: AbortSignal,
+	fetchImpl: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<LiteLLMModelInfo[]> {
-	const fromModelInfo = await fetchModelInfo(baseUrl, apiKey, signal);
+	const fromModelInfo = await fetchModelInfo(baseUrl, apiKey, signal, fetchImpl);
 	if (fromModelInfo && fromModelInfo.length > 0) {
 		return fromModelInfo;
 	}
 
-	return fetchModelsList(baseUrl, apiKey, signal);
+	return fetchModelsList(baseUrl, apiKey, signal, fetchImpl);
 }
