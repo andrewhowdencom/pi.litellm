@@ -1,0 +1,42 @@
+{
+  "name": "pi-litellm",
+  "version": "0.1.0",
+  "description": "Pi extension that adds LiteLLM as a provider with automatic model discovery",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "litellm",
+    "llm-proxy"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrewhowdencom/pi.litellm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/andrewhowdencom/pi.litellm/issues"
+  },
+  "homepage": "https://github.com/andrewhowdencom/pi.litellm#readme",
+  "license": "MIT",
+  "files": [
+    "extensions/",
+    "src/",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "echo 'nothing to clean'",
+    "build": "echo 'nothing to build — jiti handles TypeScript at runtime'",
+    "check": "echo 'nothing to check — validated at runtime by Pi'"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-ai": "*",
+    "typebox": "*"
+  }
+}
