@@ -86,8 +86,8 @@ async function fetchModelInfo(
 			.map((entry) => {
 				const info = entry.model_info ?? {};
 				return {
-					id: info.id ?? entry.model_name ?? entry.litellm_params?.model ?? "unknown",
-					name: entry.model_name ?? entry.litellm_params?.model,
+					id: entry.model_name ?? entry.litellm_params?.model ?? info.id ?? "unknown",
+					name: entry.model_name ?? entry.litellm_params?.model ?? info.id,
 					max_tokens: info.max_tokens,
 					max_input_tokens: info.max_input_tokens,
 					input_cost_per_token: info.input_cost_per_token,
