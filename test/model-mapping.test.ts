@@ -114,6 +114,7 @@ describe("mapToPiModel", () => {
 			cost: { input: 30, output: 60, cacheRead: 0, cacheWrite: 0 },
 			contextWindow: 8192,
 			maxTokens: 4096,
+			compat: { supportsStore: false },
 		});
 	});
 
@@ -171,6 +172,7 @@ describe("mapToPiModel", () => {
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			contextWindow: 128000,
 			maxTokens: 4096,
+			compat: { supportsStore: false },
 		});
 	});
 
@@ -208,6 +210,7 @@ describe("mapToPiModel", () => {
 			cost: { input: 99, output: 88, cacheRead: 77, cacheWrite: 66 },
 			contextWindow: 9999,
 			maxTokens: 1111,
+			compat: { supportsStore: false },
 		});
 	});
 
