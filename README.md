@@ -23,21 +23,32 @@ pi -e git:github.com/andrewhowdencom/pi.litellm
 
 ## Configuration
 
-### Required environment variable
+### `settings.json`
 
-```bash
-export LITELLM_BASE_URL=http://localhost:4000   # your LiteLLM proxy URL
+Add the extension settings to your Pi `settings.json`. The extension reads from two locations, with project-local overriding global:
+
+**Global defaults** (`~/.pi/agent/settings.json`):
+```json
+{
+  "github.com/andrewhowdencom/pi.litellm": {
+    "baseUrl": "http://localhost:4000",
+    "apiKey": "sk-..."
+  }
+}
+```
+
+**Project-local overrides** (`./.pi/settings.json`):
+```json
+{
+  "github.com/andrewhowdencom/pi.litellm": {
+    "baseUrl": "http://project-proxy:4000"
+  }
+}
 ```
 
 The extension normalizes the URL automatically (adds `/v1` if missing, strips trailing slashes).
 
-### Optional environment variable
-
-```bash
-export LITELLM_API_KEY=sk-...   # if your LiteLLM proxy requires authentication
-```
-
-When set, the extension sends `Authorization: Bearer <key>` with every request.
+When `apiKey` is set, the extension sends `Authorization: Bearer <key>` with every request.
 
 ### Optional per-model overrides (`./.pi/litellm.json`)
 
@@ -83,7 +94,6 @@ Available override fields:
 Start Pi and select a LiteLLM model with `/model` or `Ctrl+L`:
 
 ```bash
-export LITELLM_BASE_URL=http://localhost:4000
 pi
 ```
 
@@ -92,15 +102,14 @@ Then type `/model` and search for models prefixed with `litellm/`.
 ### Print mode (one-shot)
 
 ```bash
-export LITELLM_BASE_URL=http://localhost:4000
 pi --provider litellm --model gpt-4 -p "Summarize this codebase"
 ```
 
 ### With API key
 
+Ensure `apiKey` is set in your `settings.json`, then:
+
 ```bash
-export LITELLM_BASE_URL=https://litellm.internal.company.com
-export LITELLM_API_KEY=sk-...
 pi --provider litellm --model claude-sonnet-4 -p "Refactor this function"
 ```
 
@@ -141,7 +150,7 @@ Pi startup
     ▼
 Async extension factory loads
     │
-    ├─► Read config (env vars + optional .pi/litellm.json)
+    ├─► Read config (settings.json + optional .pi/litellm.json)
     │
     ├─► Fetch /model/info (rich metadata)
     │   └─► On success: extract costs, context windows, token limits
@@ -160,19 +169,25 @@ The extension uses Pi's built-in `openai-completions` streaming API — **no cus
 
 ## Troubleshooting
 
-### `LITELLM_BASE_URL environment variable is required`
+### `LiteLLM baseUrl is required`
 
-Set the environment variable before starting Pi:
+Add the extension configuration to your Pi `settings.json`:
 
-```bash
-export LITELLM_BASE_URL=http://localhost:4000
+```json
+{
+  "github.com/andrewhowdencom/pi.litellm": {
+    "baseUrl": "http://localhost:4000"
+  }
+}
 ```
+
+Place it in `~/.pi/agent/settings.json` for global defaults, or `./.pi/settings.json` for project-local configuration.
 
 ### `No models discovered from LiteLLM proxy`
 
-- Verify your LiteLLM proxy is running and accessible at `LITELLM_BASE_URL`.
+- Verify your LiteLLM proxy is running and accessible at the configured `baseUrl`.
 - Check that the proxy has at least one model configured in its `config.yaml`.
-- If authentication is required, set `LITELLM_API_KEY`.
+- If authentication is required, set `apiKey` in your `settings.json`.
 
 ### Models appear with `contextWindow: 128000` and `cost: 0`
 
@@ -181,7 +196,7 @@ Your LiteLLM proxy is not exposing the `/model/info` endpoint (common with older
 ### `Failed to fetch models from LiteLLM: ...`
 
 - Check network connectivity to the proxy.
-- Verify the base URL is correct (try `curl $LITELLM_BASE_URL/v1/models`).
+- Verify the base URL is correct (try `curl http://localhost:4000/v1/models`, adjusting for your proxy URL).
 - If using HTTPS with a self-signed certificate, ensure your Node.js environment trusts the certificate.
 
 ## Development

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 
 export interface ModelOverrides {
 	name?: string;
@@ -21,6 +22,13 @@ export interface LiteLLMConfig {
 	modelOverrides?: Record<string, ModelOverrides>;
 }
 
+const REPO_KEY = "github.com/andrewhowdencom/pi.litellm";
+
+export interface LiteLLMSettings {
+	baseUrl?: string;
+	apiKey?: string;
+}
+
 function normalizeBaseUrl(raw: string): string {
 	let url = raw.trim();
 	if (url.endsWith("/")) {
@@ -36,7 +44,7 @@ function validateUrl(url: string): void {
 	try {
 		new URL(url);
 	} catch {
-		throw new Error(`Invalid LITELLM_BASE_URL: "${url}" is not a valid URL`);
+		throw new Error(`Invalid base URL: "${url}" is not a valid URL`);
 	}
 }
 
@@ -63,24 +71,63 @@ function loadConfigFile(deps?: {
 	}
 }
 
-export function resolveConfig(deps?: {
-	env?: NodeJS.ProcessEnv;
+export function loadSettings(deps?: {
 	readFile?: (path: string, encoding: string) => string;
 	cwd?: () => string;
+	homedir?: () => string;
+}): LiteLLMSettings | undefined {
+	const readFile = deps?.readFile ?? readFileSync;
+	const cwd = deps?.cwd ?? process.cwd;
+	const home = deps?.homedir ?? homedir;
+
+	const paths = [
+		join(cwd(), ".pi", "settings.json"),
+		join(home(), ".pi", "agent", "settings.json"),
+	];
+
+	for (const path of paths) {
+		try {
+			const raw = readFile(path, "utf-8");
+			const settings = JSON.parse(raw) as Record<string, unknown>;
+			const extSettings = settings[REPO_KEY] as
+				| { baseUrl?: string; apiKey?: string }
+				| undefined;
+			if (extSettings) {
+				return {
+					baseUrl: extSettings.baseUrl,
+					apiKey: extSettings.apiKey,
+				};
+			}
+		} catch (err) {
+			if (err instanceof Error && (err as { code?: unknown }).code === "ENOENT") {
+				continue;
+			}
+			// Silently ignore malformed JSON — graceful degradation per Pi extension skill
+		}
+	}
+	return undefined;
+}
+
+export function resolveConfig(deps?: {
+	readFile?: (path: string, encoding: string) => string;
+	cwd?: () => string;
+	homedir?: () => string;
 }): LiteLLMConfig {
-	const env = deps?.env ?? process.env;
-	const baseUrlRaw = env.LITELLM_BASE_URL;
+	const settings = loadSettings(deps);
+
+	const baseUrlRaw = settings?.baseUrl;
 	if (!baseUrlRaw) {
 		throw new Error(
-			"LITELLM_BASE_URL environment variable is required. " +
-				"Set it to your LiteLLM proxy URL, e.g. http://localhost:4000",
+			"LiteLLM baseUrl is required. " +
+				"Set it in ~/.pi/agent/settings.json or ./.pi/settings.json, " +
+				"e.g. http://localhost:4000",
 		);
 	}
 
 	const baseUrl = normalizeBaseUrl(baseUrlRaw);
 	validateUrl(baseUrl);
 
-	const apiKey = env.LITELLM_API_KEY;
+	const apiKey = settings?.apiKey;
 	const modelOverrides = loadConfigFile(deps);
 
 	return {

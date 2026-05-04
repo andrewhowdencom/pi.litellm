@@ -13,10 +13,19 @@ cd test/fixtures
 python3 -m http.server 9999 &
 ```
 
-Then set the base URL and run Pi:
+Create `./.pi/settings.json` in your working directory:
+
+```json
+{
+  "github.com/andrewhowdencom/pi.litellm": {
+    "baseUrl": "http://localhost:9999"
+  }
+}
+```
+
+Then run Pi:
 
 ```bash
-export LITELLM_BASE_URL=http://localhost:9999
 pi --list-models
 ```
 
@@ -59,10 +68,9 @@ Run it:
 node mock-server.mjs
 ```
 
-In another terminal:
+In another terminal (with `./.pi/settings.json` configured as above):
 
 ```bash
-export LITELLM_BASE_URL=http://localhost:9999
 pi --list-models
 ```
 
@@ -72,8 +80,17 @@ You should see four models: `litellm/gpt-4`, `litellm/claude-sonnet-4`, `litellm
 
 ### 1. Model discovery with rich metadata
 
+Ensure `./.pi/settings.json` points at the mock server:
+
+```json
+{
+  "github.com/andrewhowdencom/pi.litellm": {
+    "baseUrl": "http://localhost:9999"
+  }
+}
+```
+
 ```bash
-export LITELLM_BASE_URL=http://localhost:9999
 pi --list-models
 ```
 
@@ -86,9 +103,10 @@ pi --list-models
 ### 2. Chat completion round-trip
 
 ```bash
-export LITELLM_BASE_URL=http://localhost:9999
 pi --provider litellm --model gpt-4 -p "What is 2+2?"
 ```
+
+> **Note:** This assumes `./.pi/settings.json` is already configured.
 
 > **Note:** This test requires a real LiteLLM proxy or a mock that also implements `/v1/chat/completions`. The fixture server above only serves model lists.
 
@@ -115,7 +133,6 @@ const server = createServer((req, res) => {
 ```
 
 ```bash
-export LITELLM_BASE_URL=http://localhost:9999
 pi --list-models
 ```
 
@@ -140,24 +157,34 @@ Create `.pi/litellm.json` in your working directory:
 ```
 
 ```bash
-export LITELLM_BASE_URL=http://localhost:9999
 pi --list-models
 ```
 
 **Expected:** `litellm/gpt-4` shows `contextWindow: 32768` and `cost.input: 30`, overriding the discovered `8192` and `30` (which are the same here, but the override takes priority).
 
-### 5. Missing `LITELLM_BASE_URL`
+### 5. Missing `baseUrl`
+
+Remove or rename `./.pi/settings.json` and ensure `~/.pi/agent/settings.json` does not contain the extension key.
 
 ```bash
-unset LITELLM_BASE_URL
+mv .pi/settings.json .pi/settings.json.bak
 pi
 ```
 
-**Expected:** A console warning appears: `[pi-litellm] Configuration error: LITELLM_BASE_URL environment variable is required...`
+**Expected:** A console warning appears: `[pi-litellm] Configuration error: LiteLLM baseUrl is required...`
 
 ### 6. Authenticated proxy
 
-Set an API key and verify the `Authorization: Bearer` header is sent:
+Set an API key in `./.pi/settings.json` and verify the `Authorization: Bearer` header is sent:
+
+```json
+{
+  "github.com/andrewhowdencom/pi.litellm": {
+    "baseUrl": "http://localhost:9999",
+    "apiKey": "sk-test-12345"
+  }
+}
+```
 
 ```javascript
 // mock-server-auth.mjs
@@ -173,8 +200,6 @@ const server = createServer((req, res) => {
 ```
 
 ```bash
-export LITELLM_BASE_URL=http://localhost:9999
-export LITELLM_API_KEY=sk-test-12345
 pi --list-models
 ```
 
@@ -182,12 +207,20 @@ pi --list-models
 
 ## Real LiteLLM proxy test
 
-If you have a running LiteLLM proxy:
+If you have a running LiteLLM proxy, add it to `~/.pi/agent/settings.json`:
+
+```json
+{
+  "github.com/andrewhowdencom/pi.litellm": {
+    "baseUrl": "http://your-litellm-proxy:4000",
+    "apiKey": "your-key"
+  }
+}
+```
+
+Then test:
 
 ```bash
-export LITELLM_BASE_URL=http://your-litellm-proxy:4000
-export LITELLM_API_KEY=your-key   # if required
-
 # List discovered models
 pi --list-models
 
