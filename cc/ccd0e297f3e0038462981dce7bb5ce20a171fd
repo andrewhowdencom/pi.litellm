@@ -1,0 +1,21 @@
+src/model-discovery.ts
+  s_3b64bd659b8ee7::t_88c242c3b27f24 71,80,103,152-211,218-221,223-229,232
+test/model-discovery.test.ts
+  s_3b64bd659b8ee7::t_bfeb69ec7db89f 2,12,19-25,30-32,45-52,55,58-60,63-82,84-87,90-92,103-124,128,146,150,168,171,189,192-213,218,221,229-232,235,238,243-255,259,261-281,284,287-293,296,309-311,316,327,337-377
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "ccccd0e297f3e0038462981dce7bb5ce20a171fd",
+  "prompts": {},
+  "sessions": {
+    "s_3b64bd659b8ee7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f1cf3-b4da-7f68-96b8-7e059915a043",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andrew Howden <andrew.howden@deliveryhero.com>"
+    }
+  }
+}
