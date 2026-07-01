@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { discoverModels } from "../src/model-discovery.js";
+import { discoverModels, dedupeById, enrichModels } from "../src/model-discovery.js";
 
 function mockResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), {
@@ -9,17 +9,26 @@ function mockResponse(body: unknown, status = 200): Response {
 }
 
 describe("discoverModels", () => {
-	it("uses /model/info when available with valid data", async () => {
+	it("uses /v1/models as the authoritative list and enriches from /model/info", async () => {
 		const mockFetch = vi.fn(async (input: any) => {
 			if (input.includes("/model/info")) {
 				return mockResponse({
 					data: [
 						{
 							model_name: "gpt-4",
-							model_info: { id: "gpt-4", max_tokens: 4096 },
+							model_info: {
+								id: "uuid-1",
+								max_tokens: 4096,
+								max_input_tokens: 128000,
+								input_cost_per_token: 0.00001,
+								output_cost_per_token: 0.00003,
+							},
 						},
 					],
 				});
+			}
+			if (input.includes("/models")) {
+				return mockResponse({ data: [{ id: "gpt-4" }] });
 			}
 			return mockResponse({ error: "Not found" }, 404);
 		});
@@ -33,19 +42,25 @@ describe("discoverModels", () => {
 
 		expect(models).toHaveLength(1);
 		expect(models[0].id).toBe("gpt-4");
-		expect(mockFetch).toHaveBeenCalledTimes(1);
-		expect(mockFetch.mock.calls[0][0]).toContain("/model/info");
+		expect(models[0].max_tokens).toBe(4096);
+		expect(models[0].max_input_tokens).toBe(128000);
+		expect(models[0].input_cost_per_token).toBe(0.00001);
+		expect(models[0].output_cost_per_token).toBe(0.00003);
+		// both endpoints are consulted: /v1/models first, then /model/info
+		expect(mockFetch).toHaveBeenCalledTimes(2);
+		expect(mockFetch.mock.calls[0][0]).toContain("/models");
+		expect(mockFetch.mock.calls[1][0]).toContain("/model/info");
 	});
 
-	it("falls back to /v1/models when /model/info returns 404", async () => {
+	it("shows a model present in /v1/models but absent from /model/info (no metadata)", async () => {
 		const mockFetch = vi.fn(async (input: any) => {
 			if (input.includes("/model/info")) {
-				return mockResponse({ error: "Not found" }, 404);
+				return mockResponse({
+					data: [{ model_name: "gpt-4", model_info: { id: "u", max_tokens: 4096 } }],
+				});
 			}
 			if (input.includes("/models")) {
-				return mockResponse({
-					data: [{ id: "gpt-4" }, { id: "claude-sonnet" }],
-				});
+				return mockResponse({ data: [{ id: "gpt-4" }, { id: "claude-sonnet" }] });
 			}
 			return mockResponse({ error: "Not found" }, 404);
 		});
@@ -57,13 +72,60 @@ describe("discoverModels", () => {
 			mockFetch,
 		);
 
-		expect(models).toHaveLength(2);
-		expect(mockFetch).toHaveBeenCalledTimes(2);
-		expect(mockFetch.mock.calls[0][0]).toContain("/model/info");
-		expect(mockFetch.mock.calls[1][0]).toContain("/models");
+		expect(models.map((m) => m.id)).toEqual(["gpt-4", "claude-sonnet"]);
+		const claude = models.find((m) => m.id === "claude-sonnet")!;
+		expect(claude.max_tokens).toBeUndefined();
 	});
 
-	it("falls back to /v1/models when /model/info returns 500", async () => {
+	it("excludes a model present only in /model/info (not key-scoped)", async () => {
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/model/info")) {
+				return mockResponse({
+					data: [
+						{ model_name: "gpt-4", model_info: { id: "u1" } },
+						{ model_name: "secret-model", model_info: { id: "u2" } },
+					],
+				});
+			}
+			if (input.includes("/models")) {
+				return mockResponse({ data: [{ id: "gpt-4" }] });
+			}
+			return mockResponse({ error: "Not found" }, 404);
+		});
+
+		const models = await discoverModels(
+			"http://localhost:4000",
+			undefined,
+			undefined,
+			mockFetch,
+		);
+
+		expect(models.map((m) => m.id)).toEqual(["gpt-4"]);
+	});
+
+	it("returns key-scoped list without enrichment when /model/info returns 404", async () => {
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/model/info")) {
+				return mockResponse({ error: "Not found" }, 404);
+			}
+			if (input.includes("/models")) {
+				return mockResponse({ data: [{ id: "gpt-4" }, { id: "claude" }] });
+			}
+			return mockResponse({ error: "Not found" }, 404);
+		});
+
+		const models = await discoverModels(
+			"http://localhost:4000",
+			undefined,
+			undefined,
+			mockFetch,
+		);
+
+		expect(models.map((m) => m.id)).toEqual(["gpt-4", "claude"]);
+		expect(mockFetch).toHaveBeenCalledTimes(2);
+	});
+
+	it("returns key-scoped list without enrichment when /model/info returns 500", async () => {
 		const mockFetch = vi.fn(async (input: any) => {
 			if (input.includes("/model/info")) {
 				return mockResponse({ error: "Internal error" }, 500);
@@ -81,12 +143,11 @@ describe("discoverModels", () => {
 			mockFetch,
 		);
 
-		expect(models).toHaveLength(1);
-		expect(models[0].id).toBe("gpt-4");
+		expect(models.map((m) => m.id)).toEqual(["gpt-4"]);
 		expect(mockFetch).toHaveBeenCalledTimes(2);
 	});
 
-	it("falls back to /v1/models when /model/info returns invalid shape", async () => {
+	it("returns key-scoped list without enrichment when /model/info shape is invalid", async () => {
 		const mockFetch = vi.fn(async (input: any) => {
 			if (input.includes("/model/info")) {
 				return mockResponse({ models: [] });
@@ -104,12 +165,10 @@ describe("discoverModels", () => {
 			mockFetch,
 		);
 
-		expect(models).toHaveLength(1);
-		expect(models[0].id).toBe("gpt-4");
-		expect(mockFetch).toHaveBeenCalledTimes(2);
+		expect(models.map((m) => m.id)).toEqual(["gpt-4"]);
 	});
 
-	it("falls back to /v1/models when /model/info network fails", async () => {
+	it("returns key-scoped list without enrichment when /model/info network fails", async () => {
 		const mockFetch = vi.fn(async (input: any) => {
 			if (input.includes("/model/info")) {
 				throw new Error("Network error");
@@ -127,48 +186,10 @@ describe("discoverModels", () => {
 			mockFetch,
 		);
 
-		expect(models).toHaveLength(1);
-		expect(models[0].id).toBe("gpt-4");
-		expect(mockFetch).toHaveBeenCalledTimes(2);
+		expect(models.map((m) => m.id)).toEqual(["gpt-4"]);
 	});
 
-	it("re-throws AbortError without falling back", async () => {
-		const abortError = new Error("Aborted");
-		abortError.name = "AbortError";
-
-		const mockFetch = vi.fn(async (input: any) => {
-			if (input.includes("/model/info")) {
-				throw abortError;
-			}
-			return mockResponse({ data: [{ id: "gpt-4" }] });
-		});
-
-		await expect(
-			discoverModels("http://localhost:4000", undefined, undefined, mockFetch),
-		).rejects.toThrow("Aborted");
-
-		expect(mockFetch).toHaveBeenCalledTimes(1);
-	});
-
-	it("throws when both endpoints fail", async () => {
-		const mockFetch = vi.fn(async (input: any) => {
-			if (input.includes("/model/info")) {
-				return mockResponse({ error: "Internal error" }, 500);
-			}
-			if (input.includes("/models")) {
-				return mockResponse({ error: "Bad gateway" }, 502);
-			}
-			return mockResponse({ error: "Not found" }, 404);
-		});
-
-		await expect(
-			discoverModels("http://localhost:4000", undefined, undefined, mockFetch),
-		).rejects.toThrow("502");
-
-		expect(mockFetch).toHaveBeenCalledTimes(2);
-	});
-
-	it("falls back when /model/info returns empty array", async () => {
+	it("returns key-scoped list without enrichment when /model/info is empty", async () => {
 		const mockFetch = vi.fn(async (input: any) => {
 			if (input.includes("/model/info")) {
 				return mockResponse({ data: [] });
@@ -186,13 +207,113 @@ describe("discoverModels", () => {
 			mockFetch,
 		);
 
+		expect(models.map((m) => m.id)).toEqual(["gpt-4"]);
+	});
+
+	it("re-throws AbortError from /v1/models without enriching", async () => {
+		const abortError = new Error("Aborted");
+		abortError.name = "AbortError";
+
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/models") && !input.includes("/model/info")) {
+				throw abortError;
+			}
+			return mockResponse({ data: [] });
+		});
+
+		await expect(
+			discoverModels("http://localhost:4000", undefined, undefined, mockFetch),
+		).rejects.toThrow("Aborted");
+	});
+
+	it("re-throws AbortError from /model/info", async () => {
+		const abortError = new Error("Aborted");
+		abortError.name = "AbortError";
+
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/model/info")) {
+				throw abortError;
+			}
+			if (input.includes("/models")) {
+				return mockResponse({ data: [{ id: "gpt-4" }] });
+			}
+			return mockResponse({ error: "Not found" }, 404);
+		});
+
+		await expect(
+			discoverModels("http://localhost:4000", undefined, undefined, mockFetch),
+		).rejects.toThrow("Aborted");
+	});
+
+	it("surfaces an error when /v1/models fails", async () => {
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/models") && !input.includes("/model/info")) {
+				return mockResponse({ error: "Bad gateway" }, 502);
+			}
+			return mockResponse({ data: [] });
+		});
+
+		await expect(
+			discoverModels("http://localhost:4000", undefined, undefined, mockFetch),
+		).rejects.toThrow("502");
+	});
+
+	it("deduplicates authoritative /v1/models entries", async () => {
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/model/info")) {
+				return mockResponse({ error: "Not found" }, 404);
+			}
+			if (input.includes("/models")) {
+				return mockResponse({
+					data: [{ id: "gpt-4" }, { id: "gpt-4" }, { id: "claude" }],
+				});
+			}
+			return mockResponse({ error: "Not found" }, 404);
+		});
+
+		const models = await discoverModels(
+			"http://localhost:4000",
+			undefined,
+			undefined,
+			mockFetch,
+		);
+
+		expect(models.map((m) => m.id)).toEqual(["gpt-4", "claude"]);
+	});
+
+	it("deduplicates /model/info entries that share a model_name before enriching", async () => {
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/model/info")) {
+				return mockResponse({
+					data: [
+						{ model_name: "claude-opus-4-7", model_info: { id: "uuid-1", max_tokens: 128000 } },
+						{ model_name: "claude-opus-4-7", model_info: { id: "uuid-2", max_tokens: 999 } },
+						{ model_name: "claude-opus-4-7", model_info: { id: "uuid-3", max_tokens: 111 } },
+					],
+				});
+			}
+			if (input.includes("/models")) {
+				return mockResponse({ data: [{ id: "claude-opus-4-7" }] });
+			}
+			return mockResponse({ error: "Not found" }, 404);
+		});
+
+		const models = await discoverModels(
+			"http://localhost:4000",
+			undefined,
+			undefined,
+			mockFetch,
+		);
+
 		expect(models).toHaveLength(1);
-		expect(mockFetch).toHaveBeenCalledTimes(2);
+		expect(models[0].id).toBe("claude-opus-4-7");
+		// first occurrence wins for enrichment metadata
+		expect(models[0].max_tokens).toBe(128000);
 	});
 
 	it("passes apiKey in Authorization header", async () => {
 		const mockFetch = vi.fn(async () => {
-			return mockResponse({ data: [{ model_name: "gpt-4", model_info: { id: "gpt-4" } }] });
+			return mockResponse({ data: [{ id: "gpt-4" }] });
 		});
 
 		await discoverModels("http://localhost:4000", "sk-test-123", undefined, mockFetch);
@@ -203,7 +324,7 @@ describe("discoverModels", () => {
 
 	it("passes signal to fetch", async () => {
 		const mockFetch = vi.fn(async () => {
-			return mockResponse({ data: [{ model_name: "gpt-4", model_info: { id: "gpt-4" } }] });
+			return mockResponse({ data: [{ id: "gpt-4" }] });
 		});
 
 		const controller = new AbortController();
@@ -211,5 +332,46 @@ describe("discoverModels", () => {
 
 		const [, requestInit] = mockFetch.mock.calls[0] as unknown as [string, { signal: AbortSignal }];
 		expect(requestInit.signal).toBe(controller.signal);
+	});
+});
+
+describe("enrichModels", () => {
+	it("copies metadata onto matching base models by id", () => {
+		const base = [{ id: "a", name: "a" }, { id: "b", name: "b" }];
+		const infoById = new Map([
+			["a", { id: "a", max_tokens: 100, input_cost_per_token: 0.001 }],
+		]);
+		const result = enrichModels(base, infoById);
+		expect(result[0]).toMatchObject({ id: "a", max_tokens: 100, input_cost_per_token: 0.001 });
+		expect(result[1]).toEqual({ id: "b", name: "b" });
+	});
+
+	it("returns base unchanged when the info map is empty", () => {
+		const base = [{ id: "a" }, { id: "b" }];
+		expect(enrichModels(base, new Map())).toEqual(base);
+	});
+});
+
+describe("dedupeById", () => {
+	it("keeps the first occurrence of each id", () => {
+		const result = dedupeById([
+			{ id: "a", name: "first-a" },
+			{ id: "b", name: "only-b" },
+			{ id: "a", name: "second-a" },
+			{ id: "a", name: "third-a" },
+		]);
+		expect(result).toEqual([
+			{ id: "a", name: "first-a" },
+			{ id: "b", name: "only-b" },
+		]);
+	});
+
+	it("returns an empty array unchanged", () => {
+		expect(dedupeById([])).toEqual([]);
+	});
+
+	it("is a no-op when all ids are unique", () => {
+		const input = [{ id: "a" }, { id: "b" }, { id: "c" }];
+		expect(dedupeById(input)).toEqual(input);
 	});
 });
