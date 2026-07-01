@@ -68,7 +68,7 @@ async function fetchModelInfo(
 
 		if (!response.ok) {
 			console.warn(
-				`LiteLLM /model/info returned ${response.status} — falling back to /v1/models`,
+				`LiteLLM /model/info returned ${response.status} — skipping metadata enrichment`,
 			);
 			return null;
 		}
@@ -77,7 +77,7 @@ async function fetchModelInfo(
 
 		if (!isValidModelInfoResponse(data)) {
 			console.warn(
-				"LiteLLM /model/info returned unexpected shape — falling back to /v1/models",
+				"LiteLLM /model/info returned unexpected shape — skipping metadata enrichment",
 			);
 			return null;
 		}
@@ -100,7 +100,7 @@ async function fetchModelInfo(
 			throw err;
 		}
 		console.warn(
-			`LiteLLM /model/info request failed (${err instanceof Error ? err.message : String(err)}) — falling back to /v1/models`,
+			`LiteLLM /model/info request failed (${err instanceof Error ? err.message : String(err)}) — skipping metadata enrichment`,
 		);
 		return null;
 	}
@@ -149,16 +149,85 @@ async function fetchModelsList(
 	}
 }
 
+/**
+ * Deduplicate models by `id`, keeping the first occurrence.
+ *
+ * LiteLLM's /model/info endpoint returns one entry per *deployment*, not per
+ * public alias. A router config that fronts multiple backends behind a single
+ * `model_name` (e.g. several Vertex AI projects load-balanced under
+ * `claude-opus-4-7`) will therefore emit N entries that all collapse to the
+ * same `id` after mapping. Pi's ModelRegistry stores models in a flat array
+ * and resolves lookups via `Array.find()` (first match wins), so registering
+ * duplicates produces N visually identical picker rows where only the first
+ * is ever reachable via lookup. We dedupe here so pi only ever sees one entry
+ * per public alias — which is also what /v1/models would have returned.
+ */
+export function dedupeById(models: LiteLLMModelInfo[]): LiteLLMModelInfo[] {
+	const seen = new Set<string>();
+	const result: LiteLLMModelInfo[] = [];
+	for (const model of models) {
+		if (seen.has(model.id)) continue;
+		seen.add(model.id);
+		result.push(model);
+	}
+	return result;
+}
+
+/**
+ * Merge metadata from /model/info onto the authoritative /v1/models list.
+ *
+ * The authoritative list defines *which* models are shown (it is key-scoped),
+ * while /model/info supplies cost and context-window metadata. We join on
+ * `id` (which corresponds to the LiteLLM `model_name`) and copy metadata
+ * fields when a match exists. Models absent from the info map keep their
+ * base shape (metadata falls back to mapping defaults and user overrides).
+ */
+export function enrichModels(
+	base: LiteLLMModelInfo[],
+	infoById: Map<string, LiteLLMModelInfo>,
+): LiteLLMModelInfo[] {
+	return base.map((model) => {
+		const info = infoById.get(model.id);
+		if (!info) return model;
+		return {
+			...model,
+			max_tokens: info.max_tokens ?? model.max_tokens,
+			max_input_tokens: info.max_input_tokens ?? model.max_input_tokens,
+			input_cost_per_token: info.input_cost_per_token ?? model.input_cost_per_token,
+			output_cost_per_token: info.output_cost_per_token ?? model.output_cost_per_token,
+		};
+	});
+}
+
+/**
+ * Discover the models the caller's API key can use.
+ *
+ * `/v1/models` is the authoritative, key-scoped source of *which* models to
+ * show — it returns exactly the aliases the key may call, with no duplicate
+ * per-deployment rows and no tag-gated entries the key cannot reach.
+ * `/model/info` is used only to enrich those models with cost and
+ * context-window metadata; if it is unavailable or malformed we degrade
+ * gracefully and return the key-scoped list without enrichment.
+ */
 export async function discoverModels(
 	baseUrl: string,
 	apiKey?: string,
 	signal?: AbortSignal,
 	fetchImpl: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<LiteLLMModelInfo[]> {
+	const authoritative = dedupeById(
+		await fetchModelsList(baseUrl, apiKey, signal, fetchImpl),
+	);
+
 	const fromModelInfo = await fetchModelInfo(baseUrl, apiKey, signal, fetchImpl);
-	if (fromModelInfo && fromModelInfo.length > 0) {
-		return fromModelInfo;
+	if (!fromModelInfo || fromModelInfo.length === 0) {
+		return authoritative;
 	}
 
-	return fetchModelsList(baseUrl, apiKey, signal, fetchImpl);
+	const infoById = new Map<string, LiteLLMModelInfo>();
+	for (const info of dedupeById(fromModelInfo)) {
+		infoById.set(info.id, info);
+	}
+
+	return enrichModels(authoritative, infoById);
 }
