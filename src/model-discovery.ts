@@ -1,6 +1,7 @@
 export interface LiteLLMModelInfo {
 	id: string;
 	name?: string;
+	provider?: string;
 	max_tokens?: number;
 	max_input_tokens?: number;
 	input_cost_per_token?: number;
@@ -20,7 +21,7 @@ function buildHeaders(apiKey?: string): Record<string, string> {
 export function isValidModelInfoResponse(data: unknown): data is {
 	data: Array<{
 		model_name?: string;
-		litellm_params?: { model?: string };
+		litellm_params?: { model?: string; custom_llm_provider?: string };
 		model_info?: {
 			id?: string;
 			max_tokens?: number;
@@ -39,7 +40,7 @@ export function isValidModelInfoResponse(data: unknown): data is {
 }
 
 export function isValidModelsResponse(data: unknown): data is {
-	data: Array<{ id?: string }>;
+	data: Array<{ id?: string; owned_by?: string }>;
 } {
 	return (
 		typeof data === "object" &&
@@ -88,6 +89,7 @@ async function fetchModelInfo(
 				return {
 					id: entry.model_name ?? entry.litellm_params?.model ?? info.id ?? "unknown",
 					name: entry.model_name ?? entry.litellm_params?.model ?? info.id,
+					provider: entry.litellm_params?.custom_llm_provider,
 					max_tokens: info.max_tokens,
 					max_input_tokens: info.max_input_tokens,
 					input_cost_per_token: info.input_cost_per_token,
@@ -137,6 +139,7 @@ async function fetchModelsList(
 			.map((entry) => ({
 				id: entry.id ?? "unknown",
 				name: entry.id,
+				provider: entry.owned_by,
 			}))
 			.filter((m) => m.id !== "unknown");
 	} catch (err) {
@@ -191,6 +194,7 @@ export function enrichModels(
 		if (!info) return model;
 		return {
 			...model,
+			provider: info.provider ?? model.provider,
 			max_tokens: info.max_tokens ?? model.max_tokens,
 			max_input_tokens: info.max_input_tokens ?? model.max_input_tokens,
 			input_cost_per_token: info.input_cost_per_token ?? model.input_cost_per_token,
@@ -220,14 +224,28 @@ export async function discoverModels(
 	);
 
 	const fromModelInfo = await fetchModelInfo(baseUrl, apiKey, signal, fetchImpl);
-	if (!fromModelInfo || fromModelInfo.length === 0) {
-		return authoritative;
-	}
+	const finalModels = !fromModelInfo || fromModelInfo.length === 0
+		? authoritative
+		: enrichModels(authoritative, infoById(fromModelInfo));
 
-	const infoById = new Map<string, LiteLLMModelInfo>();
+	return finalModels.sort((a, b) => {
+		const provA = a.provider?.toLowerCase();
+		const provB = b.provider?.toLowerCase();
+
+		if (provA !== provB) {
+			if (!provA) return 1;
+			if (!provB) return -1;
+			return provA.localeCompare(provB);
+		}
+
+		return a.id.localeCompare(b.id);
+	});
+}
+
+function infoById(fromModelInfo: LiteLLMModelInfo[]): Map<string, LiteLLMModelInfo> {
+	const map = new Map<string, LiteLLMModelInfo>();
 	for (const info of dedupeById(fromModelInfo)) {
-		infoById.set(info.id, info);
+		map.set(info.id, info);
 	}
-
-	return enrichModels(authoritative, infoById);
+	return map;
 }

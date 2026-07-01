@@ -72,7 +72,7 @@ describe("discoverModels", () => {
 			mockFetch,
 		);
 
-		expect(models.map((m) => m.id)).toEqual(["gpt-4", "claude-sonnet"]);
+		expect(models.map((m) => m.id)).toEqual(["claude-sonnet", "gpt-4"]);
 		const claude = models.find((m) => m.id === "claude-sonnet")!;
 		expect(claude.max_tokens).toBeUndefined();
 	});
@@ -121,7 +121,7 @@ describe("discoverModels", () => {
 			mockFetch,
 		);
 
-		expect(models.map((m) => m.id)).toEqual(["gpt-4", "claude"]);
+		expect(models.map((m) => m.id)).toEqual(["claude", "gpt-4"]);
 		expect(mockFetch).toHaveBeenCalledTimes(2);
 	});
 
@@ -278,7 +278,7 @@ describe("discoverModels", () => {
 			mockFetch,
 		);
 
-		expect(models.map((m) => m.id)).toEqual(["gpt-4", "claude"]);
+		expect(models.map((m) => m.id)).toEqual(["claude", "gpt-4"]);
 	});
 
 	it("deduplicates /model/info entries that share a model_name before enriching", async () => {
@@ -332,6 +332,94 @@ describe("discoverModels", () => {
 
 		const [, requestInit] = mockFetch.mock.calls[0] as unknown as [string, { signal: AbortSignal }];
 		expect(requestInit.signal).toBe(controller.signal);
+	});
+
+	it("sorts models by provider (with undefined provider last) and then alphabetically", async () => {
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/model/info")) {
+				return mockResponse({
+					data: [
+						{
+							model_name: "gpt-4o",
+							litellm_params: { custom_llm_provider: "openai" },
+						},
+						{
+							model_name: "claude-3-5-sonnet",
+							litellm_params: { custom_llm_provider: "anthropic" },
+						},
+						{
+							model_name: "gemini-1.5-pro",
+							litellm_params: { custom_llm_provider: "google" },
+						},
+						{
+							model_name: "unknown-provider-model",
+							// no custom_llm_provider
+						},
+					],
+				});
+			}
+			if (input.includes("/models")) {
+				return mockResponse({
+					data: [
+						{ id: "gpt-4o" },
+						{ id: "unknown-provider-model" },
+						{ id: "claude-3-5-sonnet" },
+						{ id: "gemini-1.5-pro" },
+					],
+				});
+			}
+			return mockResponse({ error: "Not found" }, 404);
+		});
+
+		const models = await discoverModels(
+			"http://localhost:4000",
+			undefined,
+			undefined,
+			mockFetch,
+		);
+
+		// Expected order:
+		// 1. anthropic (claude-3-5-sonnet)
+		// 2. google (gemini-1.5-pro)
+		// 3. openai (gpt-4o)
+		// 4. undefined/last (unknown-provider-model)
+		expect(models.map((m) => m.id)).toEqual([
+			"claude-3-5-sonnet",
+			"gemini-1.5-pro",
+			"gpt-4o",
+			"unknown-provider-model",
+		]);
+	});
+
+	it("extracts and sorts by provider parsed from /v1/models owned_by field when /model/info is unavailable", async () => {
+		const mockFetch = vi.fn(async (input: any) => {
+			if (input.includes("/model/info")) {
+				return mockResponse({ error: "Not found" }, 404);
+			}
+			if (input.includes("/models")) {
+				return mockResponse({
+					data: [
+						{ id: "gpt-4o", owned_by: "openai" },
+						{ id: "claude-3-5-sonnet", owned_by: "anthropic" },
+						{ id: "gemini-1.5-pro", owned_by: "google" },
+					],
+				});
+			}
+			return mockResponse({ error: "Not found" }, 404);
+		});
+
+		const models = await discoverModels(
+			"http://localhost:4000",
+			undefined,
+			undefined,
+			mockFetch,
+		);
+
+		expect(models.map((m) => m.id)).toEqual([
+			"claude-3-5-sonnet",
+			"gemini-1.5-pro",
+			"gpt-4o",
+		]);
 	});
 });
 
