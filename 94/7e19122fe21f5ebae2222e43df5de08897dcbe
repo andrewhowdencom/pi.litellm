@@ -1,0 +1,21 @@
+test/model-discovery.test.ts
+  s_5c780e5824b3ca::t_98b64859756526 75,124,281,336-423
+src/model-discovery.ts
+  s_5c780e5824b3ca::t_95e49482367e31 4,24,43,92,142,197,227-243,245-246,248,250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "947e19122fe21f5ebae2222e43df5de08897dcbe",
+  "prompts": {},
+  "sessions": {
+    "s_5c780e5824b3ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f1d87-c751-7cce-a346-9f98b0b5d1a2",
+        "model": "gemini-3-5-flash"
+      },
+      "human_author": "Andrew Howden <andrew.howden@deliveryhero.com>"
+    }
+  }
+}
