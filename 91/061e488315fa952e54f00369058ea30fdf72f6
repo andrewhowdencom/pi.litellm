@@ -1,0 +1,24 @@
+docs/index.md
+  s_3b64bd659b8ee7::t_10900021808a0b 126-129,170
+test/manual-test.md
+  s_3b64bd659b8ee7::t_5ef2df59fc4038 113,115-117,141-145
+README.md
+  s_3b64bd659b8ee7::t_feb72eb8f6f5b9 157-158,160-162,197,225
+  s_3b64bd659b8ee7::t_eb872816ac2630 120,122-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "91061e488315fa952e54f00369058ea30fdf72f6",
+  "prompts": {},
+  "sessions": {
+    "s_3b64bd659b8ee7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f1cf3-b4da-7f68-96b8-7e059915a043",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andrew Howden <andrew.howden@deliveryhero.com>"
+    }
+  }
+}
