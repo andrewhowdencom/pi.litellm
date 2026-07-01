@@ -1,0 +1,22 @@
+.plans/fix-litellm-model-discovery-scoping.md
+  s_3b64bd659b8ee7::t_80f5cdf8ad5854 91-117
+  s_3b64bd659b8ee7::t_7789450c0691be 1-19
+  s_3b64bd659b8ee7::t_a9cd7916534a60 20-37
+  s_3b64bd659b8ee7::t_d0e5d7a397c6a4 38-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "6501bac9118ca02de8ec1b394552c2a3fee2f55d",
+  "prompts": {},
+  "sessions": {
+    "s_3b64bd659b8ee7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f1cf3-b4da-7f68-96b8-7e059915a043",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andrew Howden <andrew.howden@deliveryhero.com>"
+    }
+  }
+}
