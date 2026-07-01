@@ -110,9 +110,11 @@ pi --provider litellm --model gpt-4 -p "What is 2+2?"
 
 > **Note:** This test requires a real LiteLLM proxy or a mock that also implements `/v1/chat/completions`. The fixture server above only serves model lists.
 
-### 3. Fallback to `/v1/models`
+### 3. Enrichment unavailable (`/model/info` blocked)
 
-Block the `/model/info` endpoint and verify fallback behavior:
+`/v1/models` is the authoritative, key-scoped source of *which* models
+appear; `/model/info` only enriches them with metadata. Block
+`/model/info` and verify the models still appear (with default metadata):
 
 ```javascript
 // mock-server-fallback.mjs
@@ -136,7 +138,11 @@ const server = createServer((req, res) => {
 pi --list-models
 ```
 
-**Expected:** All four models appear, but all have `contextWindow: 128000` (default) and `cost: 0` (default) since the minimal `/v1/models` response has no metadata.
+**Expected:** All four models still appear (they come from the
+key-scoped `/v1/models` list), but all have `contextWindow: 128000`
+(default) and `cost: 0` (default) because `/model/info` enrichment was
+unavailable. Note: if `/v1/models` itself fails, discovery surfaces an
+error and no models are registered.
 
 ### 4. Config file overrides
 

@@ -117,9 +117,11 @@ pi --provider litellm --model claude-sonnet-4 -p "Refactor this function"
 
 At startup, the extension queries your LiteLLM proxy in two phases. `{baseUrl}` below refers to your `LITELLM_BASE_URL` after normalization — it always ends with `/v1`.
 
-1. **Primary:** `GET {baseUrl}/model/info` — LiteLLM's rich metadata endpoint. Returns model IDs, context windows, token limits, and per-token costs when available.
+1. **Authoritative list:** `GET {baseUrl}/models` — the OpenAI-compatible list endpoint. This is **key-scoped**: it returns exactly the model aliases your API key is entitled to call, with no duplicate per-deployment rows and no tag-gated entries you cannot reach. It defines *which* models appear in the picker.
 
-2. **Fallback:** If `/model/info` returns 404 or errors, `GET {baseUrl}/models` — OpenAI-compatible minimal list. Only model IDs are available; all other metadata uses sensible defaults.
+2. **Metadata enrichment:** `GET {baseUrl}/model/info` — LiteLLM's rich metadata endpoint. Its context windows, token limits, and per-token costs are merged onto the authoritative models (joined by `model_name`). This step is best-effort: if `/model/info` returns 404, errors, or is malformed, the extension keeps the key-scoped list and applies sensible defaults for the missing metadata.
+
+> Only models returned by `/models` are shown, so you never see a model your key cannot use. This avoids the "not allowed access to model due to tags configuration" error that occurs when a proxy fronts one alias with multiple tag-scoped deployments.
 
 ### Sensible defaults
 
@@ -152,11 +154,12 @@ Async extension factory loads
     │
     ├─► Read config (settings.json + optional .pi/litellm.json)
     │
-    ├─► Fetch /model/info (rich metadata)
-    │   └─► On success: extract costs, context windows, token limits
+    ├─► Fetch /models (authoritative, key-scoped list)
+    │   └─► Defines which models are shown
     │
-    ├─► On failure: fetch /models (minimal list)
-    │   └─► Only model IDs available
+    ├─► Fetch /model/info (best-effort enrichment)
+    │   └─► Merge costs, context windows, token limits by model_name
+    │   └─► On failure: keep list, apply defaults for metadata
     │
     ├─► Map each model to Pi ProviderModelConfig
     │   └─► Apply defaults for missing fields
@@ -191,7 +194,7 @@ Place it in `~/.pi/agent/settings.json` for global defaults, or `./.pi/settings.
 
 ### Models appear with `contextWindow: 128000` and `cost: 0`
 
-Your LiteLLM proxy is not exposing the `/model/info` endpoint (common with older versions or minimal deployments). The extension falls back to `/v1/models`, which only returns model IDs. All other fields use defaults. Upgrade LiteLLM or add per-model overrides in `.pi/litellm.json`.
+Your LiteLLM proxy is not exposing the `/model/info` endpoint (common with older versions or minimal deployments), so metadata enrichment is skipped. The authoritative `/v1/models` list still populates the picker, but with default context windows and costs. Upgrade LiteLLM or add per-model overrides in `.pi/litellm.json`.
 
 ### `Failed to fetch models from LiteLLM: ...`
 
@@ -219,7 +222,7 @@ npm run build
 
 - [Pi](https://pi.dev) ≥ 0.72 (for `registerProvider` API)
 - [LiteLLM Proxy](https://docs.litellm.ai/docs/simple_proxy) with at least `/v1/models` exposed
-- `/model/info` endpoint recommended for rich metadata (costs, context windows)
+- `/model/info` endpoint recommended for rich metadata enrichment (costs, context windows)
 - Peer dependencies (provided by Pi): `@mariozechner/pi-ai`, `@mariozechner/pi-coding-agent`, `typebox`
 
 ## Support

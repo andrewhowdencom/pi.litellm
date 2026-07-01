@@ -123,8 +123,10 @@ pi --provider litellm --model claude-sonnet-4 -p "Refactor this function"
 
 At startup, the extension queries your LiteLLM proxy in two phases:
 
-1. **Primary:** `GET {baseUrl}/model/info` — rich metadata endpoint returning model IDs, context windows, token limits, and costs.
-2. **Fallback:** If `/model/info` returns 404 or errors, `GET {baseUrl}/models` — OpenAI-compatible minimal list. Only model IDs are available; defaults apply for all other metadata.
+1. **Authoritative list:** `GET {baseUrl}/models` — the OpenAI-compatible, **key-scoped** list. It returns exactly the model aliases your API key may call, defining *which* models appear in the picker (no duplicate per-deployment rows, no tag-gated entries you cannot reach).
+2. **Metadata enrichment:** `GET {baseUrl}/model/info` — rich metadata (context windows, token limits, costs) merged onto the authoritative models by `model_name`. Best-effort: if it returns 404, errors, or is malformed, the key-scoped list is kept and defaults apply for the missing metadata.
+
+Because only models returned by `/models` are shown, you never see a model your key cannot use — avoiding the "not allowed access to model due to tags configuration" error.
 
 ### Sensible defaults
 
@@ -165,7 +167,7 @@ Add the extension configuration to your Pi `settings.json`:
 
 ### Models appear with `contextWindow: 128000` and `cost: 0`
 
-Your proxy is not exposing `/model/info`. The extension falls back to `/v1/models`, which only returns model IDs. Upgrade LiteLLM or add per-model overrides in `.pi/litellm.json`.
+Your proxy is not exposing `/model/info`, so metadata enrichment is skipped. The authoritative `/v1/models` list still populates the picker, but with default context windows and costs. Upgrade LiteLLM or add per-model overrides in `.pi/litellm.json`.
 
 ### `Failed to fetch models from LiteLLM`
 
